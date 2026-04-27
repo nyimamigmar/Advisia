@@ -2,8 +2,8 @@ name: Tägliche Zefix-Prüfung Bezirk Muri
 
 on:
   schedule:
-    # 07:00 UTC = 08:00 MEZ / 09:00 MESZ – Montag bis Freitag
-    - cron: "0 7 * * 1-5"
+    # 07:15 UTC = 08:15 MEZ (Winter) / 09:15 MESZ (Sommer)
+    - cron: "15 7 * * 1-5"
   workflow_dispatch:
     inputs:
       reset_state:
@@ -39,11 +39,10 @@ jobs:
       - name: Abhängigkeiten installieren
         run: pip install -r requirements.txt
 
-      - name: Zefix-Prüfung durchführen
+      - name: Zefix-Prüfung durchführen & Tagesbericht senden
         run: python src/main.py
         env:
-          # Absender-Details: in den Repository-Variablen (Settings → Variables) hinterlegen.
-          # Pflichtfelder für den Briefkopf:
+          # Absender-Daten (Repository Variables → Settings → Variables → Actions)
           SENDER_COMPANY:  ${{ vars.SENDER_COMPANY }}
           SENDER_NAME:     ${{ vars.SENDER_NAME }}
           SENDER_ADDRESS:  ${{ vars.SENDER_ADDRESS }}
@@ -51,6 +50,10 @@ jobs:
           SENDER_PHONE:    ${{ vars.SENDER_PHONE }}
           SENDER_EMAIL:    ${{ vars.SENDER_EMAIL }}
           SENDER_WEBSITE:  ${{ vars.SENDER_WEBSITE }}
+          # E-Mail-Versand (Repository Secrets → Settings → Secrets → Actions)
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          REPORT_TO: migmar.nyima@gmail.com
 
       - name: Generierte Briefe als Artefakt speichern
         if: always()

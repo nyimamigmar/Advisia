@@ -7,7 +7,8 @@ Ablauf:
   3. Neue Firmen (UID nicht in Statusdatei) erkennen.
   4. Adresse via Zefix-Detail-API abrufen.
   5. PDF-Gratulationsbrief generieren.
-  6. Statusdatei aktualisieren (für den nächsten Lauf).
+  6. Tagesbericht per E-Mail senden.
+  7. Statusdatei aktualisieren (für den nächsten Lauf).
 """
 
 import json
@@ -24,6 +25,7 @@ from config import (
     STATE_FILE,
 )
 from letter_generator import generate_letter, safe_filename
+from reporter import send_report
 from zefix_client import get_firm_details, search_firms_in_canton
 
 logging.basicConfig(
@@ -104,8 +106,6 @@ def main() -> None:
         if first_run:
             reg_date = parse_registration_date(firm)
             if reg_date < cutoff:
-                # Bereits länger bestehende Firma beim Erstlauf nur merken,
-                # keinen Brief generieren.
                 seen_uids[uid] = _seen_entry(firm, letter=False)
                 continue
 
@@ -146,9 +146,13 @@ def main() -> None:
         if uid and uid not in seen_uids:
             seen_uids[uid] = _seen_entry(firm, letter=False)
 
-    # 6. Status speichern
+    # 6. Tagesbericht per E-Mail senden
+    check_time = datetime.now()
+    send_report(new_firms, check_time)
+
+    # 7. Status speichern
     state["first_run"]  = False
-    state["last_check"] = datetime.now().isoformat()
+    state["last_check"] = check_time.isoformat()
     state["seen_uids"]  = seen_uids
     save_state(state)
     logger.info("Statusdatei gespeichert: %s", STATE_FILE)

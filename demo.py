@@ -5,7 +5,8 @@ Ablauf:
   1. Simulierte Zefix-Antwort mit 3 «neuen» Firmen im Bezirk Muri
   2. Adressrecherche (ebenfalls simuliert)
   3. PDF-Briefgenerierung für jede neue Firma
-  4. Ausgabe der Statusdatei
+  4. Tagesbericht-HTML-Vorschau (E-Mail-Versand nur wenn SMTP_USER/SMTP_PASS gesetzt)
+  5. Ausgabe der Statusdatei
 
 Aufruf:  python demo.py
 """
@@ -120,11 +121,13 @@ def run_demo():
         logger.info("")
         generated.append(out_path)
 
-    # Statusdatei-Vorschau
     from datetime import date, datetime
+    from reporter import send_report, _html_report
+
+    check_time = datetime.now()
     state_preview = {
         "first_run":  False,
-        "last_check": datetime.now().isoformat(),
+        "last_check": check_time.isoformat(),
         "seen_uids": {
             f["uid"]: {
                 "name":       f["name"],
@@ -142,12 +145,24 @@ def run_demo():
         },
     }
 
+    # E-Mail HTML-Vorschau speichern
+    firms_with_addr = [dict(f, **{"address": f["address"]}) for f in MOCK_NEW_FIRMS]
+    html_preview = _html_report(firms_with_addr, check_time)
+    preview_path = os.path.join(output_dir, "email_vorschau.html")
+    with open(preview_path, "w", encoding="utf-8") as fh:
+        fh.write(html_preview)
+    logger.info("E-Mail HTML-Vorschau gespeichert: %s", preview_path)
+
+    # E-Mail senden (nur wenn SMTP konfiguriert)
+    send_report(firms_with_addr, check_time)
+
     logger.info("=" * 60)
     logger.info("ZUSAMMENFASSUNG")
     logger.info("=" * 60)
     logger.info("Absender:       %s", SENDER_INFO["company"])
     logger.info("Adresse:        %s, %s", SENDER_INFO["address"], SENDER_INFO["zip_city"])
     logger.info("Kontakt:        %s  |  %s", SENDER_INFO["phone"], SENDER_INFO["email"])
+    logger.info("Bericht an:     migmar.nyima@gmail.com (täglich 08:15 Uhr)")
     logger.info("")
     logger.info("Generierte Briefe (%d):", len(generated))
     for p in generated:
