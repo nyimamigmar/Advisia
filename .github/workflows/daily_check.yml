@@ -1,0 +1,71 @@
+name: Tägliche Zefix-Prüfung Bezirk Muri
+
+on:
+  schedule:
+    # 07:00 UTC = 08:00 MEZ / 09:00 MESZ – Montag bis Freitag
+    - cron: "0 7 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      reset_state:
+        description: "Statusdatei zurücksetzen (neuer Erstlauf)"
+        required: false
+        default: "false"
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  check-new-companies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Statusdatei zurücksetzen (falls angefordert)
+        if: ${{ inputs.reset_state == 'true' }}
+        run: rm -f data/seen_companies.json
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Abhängigkeiten installieren
+        run: pip install -r requirements.txt
+
+      - name: Zefix-Prüfung durchführen
+        run: python src/main.py
+        env:
+          # Absender-Details: in den Repository-Variablen (Settings → Variables) hinterlegen.
+          # Pflichtfelder für den Briefkopf:
+          SENDER_COMPANY:  ${{ vars.SENDER_COMPANY }}
+          SENDER_NAME:     ${{ vars.SENDER_NAME }}
+          SENDER_ADDRESS:  ${{ vars.SENDER_ADDRESS }}
+          SENDER_ZIP_CITY: ${{ vars.SENDER_ZIP_CITY }}
+          SENDER_PHONE:    ${{ vars.SENDER_PHONE }}
+          SENDER_EMAIL:    ${{ vars.SENDER_EMAIL }}
+          SENDER_WEBSITE:  ${{ vars.SENDER_WEBSITE }}
+
+      - name: Generierte Briefe als Artefakt speichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: briefe-${{ github.run_id }}
+          path: letters/
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Statusdatei committen und pushen
+        run: |
+          git config user.name  "Zefix Bot"
+          git config user.email "zefix-bot@users.noreply.github.com"
+          git add data/seen_companies.json
+          git diff --staged --quiet || \
+            git commit -m "Zefix-Check $(date '+%Y-%m-%d'): Statusdatei aktualisiert"
+          git push origin ${{ github.ref_name }}
