@@ -1,0 +1,29 @@
+name: Troubleshoot – Test-E-Mail senden
+
+on:
+  push:
+    branches:
+      - claude/automate-business-registration-0HW8O
+    paths:
+      - 'troubleshoot.py'
+  workflow_dispatch:
+
+jobs:
+  troubleshoot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - run: pip install -r requirements.txt
+
+      - name: Troubleshoot ausführen & Test-E-Mail senden
+        run: python troubleshoot.py
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
