@@ -51,9 +51,7 @@ jobs:
           SENDER_EMAIL:    ${{ vars.SENDER_EMAIL }}
           SENDER_WEBSITE:  ${{ vars.SENDER_WEBSITE }}
           # E-Mail-Versand (Repository Secrets → Settings → Secrets → Actions)
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASS: ${{ secrets.SMTP_PASS }}
-          REPORT_TO: migmar.nyima@gmail.com
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
 
       - name: Generierte Briefe als Artefakt speichern
         if: always()

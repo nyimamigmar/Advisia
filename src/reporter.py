@@ -1,19 +1,16 @@
-"""E-Mail-Tagesbericht nach jedem Zefix-Prüflauf."""
+"""E-Mail-Tagesbericht nach jedem Zefix-Prüflauf (via Resend API)."""
 
 import logging
 import os
-import smtplib
+import requests
 from datetime import date, datetime
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 logger = logging.getLogger(__name__)
 
-REPORT_TO   = os.getenv("REPORT_TO",   "migmar.nyima@gmail.com")
-SMTP_HOST   = os.getenv("SMTP_HOST",   "smtp.gmail.com")
-SMTP_PORT   = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER   = os.getenv("SMTP_USER",   "")       # GitHub Secret: SMTP_USER
-SMTP_PASS   = os.getenv("SMTP_PASS",   "")       # GitHub Secret: SMTP_PASS
+REPORT_TO      = "migmar.nyima@gmail.com"
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")   # GitHub Secret: RESEND_API_KEY
+RESEND_URL     = "https://api.resend.com/emails"
+FROM_ADDRESS   = "Advisia Zefix-Checker <onboarding@resend.dev>"
 
 
 # ---------------------------------------------------------------------------
@@ -46,13 +43,14 @@ _MONTHS = [
     "Juli","August","September","Oktober","November","Dezember",
 ]
 
+
 def _html_report(new_firms: list[dict], check_time: datetime) -> str:
     today_str = f"{check_time.day}. {_MONTHS[check_time.month - 1]} {check_time.year}"
 
     if new_firms:
         count    = len(new_firms)
         firma_pl = "Firmen" if count > 1 else "Firma"
-        badge  = f"""
+        badge = f"""
         <div class=\"badge-ok\">
           <h3>&#10003; {count} neue {firma_pl} eingetragen</h3>
           <p style=\"margin:0;font-size:13px;\">
@@ -73,10 +71,7 @@ def _html_report(new_firms: list[dict], check_time: datetime) -> str:
         table = f"""
         <table>
           <tr>
-            <th>Firma</th>
-            <th>Gemeinde</th>
-            <th>Eingetragen</th>
-            <th>Adresse</th>
+            <th>Firma</th><th>Gemeinde</th><th>Eingetragen</th><th>Adresse</th>
           </tr>
           {rows}
         </table>"""
@@ -103,9 +98,7 @@ def _html_report(new_firms: list[dict], check_time: datetime) -> str:
     <h2>Zefix Tagesbericht &ndash; Bezirk Muri</h2>
     <p>Advisia &nbsp;|&nbsp; {today_str}</p>
   </div>
-  <div class=\"body\">
-    {main_block}
-  </div>
+  <div class=\"body\">{main_block}</div>
   <div class=\"ftr\">
     Automatisch generiert von Advisia Zefix-Checker &nbsp;&bull;&nbsp;
     {check_time.strftime('%d.%m.%Y %H:%M:%S')} &nbsp;&bull;&nbsp;
@@ -124,8 +117,8 @@ def _fmt_addr(addr: dict | None) -> str:
     hnr    = addr.get("houseNumber", "")
     if street:
         parts.append(f"{street} {hnr}".strip())
-    zip_   = addr.get("swissZipCode") or addr.get("zipCode", "")
-    city   = addr.get("city", "")
+    zip_  = addr.get("swissZipCode") or addr.get("zipCode", "")
+    city  = addr.get("city", "")
     if zip_ or city:
         parts.append(f"{zip_} {city}".strip())
     return ", ".join(parts) or "–"
@@ -144,31 +137,33 @@ def _subject(new_firms: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 def send_report(new_firms: list[dict], check_time: datetime | None = None) -> bool:
-    """Tagesbericht per E-Mail senden. Gibt True zurück bei Erfolg."""
-    if not SMTP_USER or not SMTP_PASS:
-        logger.warning(
-            "SMTP_USER / SMTP_PASS nicht gesetzt – E-Mail-Versand übersprungen."
-        )
+    """Tagesbericht per Resend API senden. Gibt True zurück bei Erfolg."""
+    if not RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY nicht gesetzt – E-Mail-Versand übersprungen.")
         return False
 
     check_time = check_time or datetime.now()
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = _subject(new_firms)
-    msg["From"]    = f"Advisia Zefix-Checker <{SMTP_USER}>"
-    msg["To"]      = REPORT_TO
-
-    html = _html_report(new_firms, check_time)
-    msg.attach(MIMEText(html, "html", "utf-8"))
-
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_USER, [REPORT_TO], msg.as_bytes())
-        logger.info("Tagesbericht gesendet an %s", REPORT_TO)
-        return True
-    except Exception as exc:  # noqa: BLE001
+        resp = requests.post(
+            RESEND_URL,
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from":    FROM_ADDRESS,
+                "to":      [REPORT_TO],
+                "subject": _subject(new_firms),
+                "html":    _html_report(new_firms, check_time),
+            },
+            timeout=15,
+        )
+        if resp.status_code in (200, 201):
+            logger.info("Tagesbericht gesendet an %s", REPORT_TO)
+            return True
+        logger.error("Resend API Fehler %d: %s", resp.status_code, resp.text)
+        return False
+    except requests.RequestException as exc:
         logger.error("E-Mail-Versand fehlgeschlagen: %s", exc)
         return False
