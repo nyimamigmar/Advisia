@@ -33,11 +33,11 @@ BEZIRK_MURI_MUNICIPALITIES = {
 }
 
 SENDER_INFO = {
-    "company":  os.getenv("SENDER_COMPANY",  "Ihre Treuhand GmbH"),
+    "company":  os.getenv("SENDER_COMPANY",  "Advisia"),
     "name":     os.getenv("SENDER_NAME",     ""),
-    "address":  os.getenv("SENDER_ADDRESS",  "Musterstrasse 1"),
-    "zip_city": os.getenv("SENDER_ZIP_CITY", "5630 Muri AG"),
-    "phone":    os.getenv("SENDER_PHONE",    "+41 56 XXX XX XX"),
-    "email":    os.getenv("SENDER_EMAIL",    "info@ihre-treuhand.ch"),
-    "website":  os.getenv("SENDER_WEBSITE",  "www.ihre-treuhand.ch"),
+    "address":  os.getenv("SENDER_ADDRESS",  "Schlyffistäg 4"),
+    "zip_city": os.getenv("SENDER_ZIP_CITY", "5630 Muri"),
+    "phone":    os.getenv("SENDER_PHONE",    "+41 79 948 56 30"),
+    "email":    os.getenv("SENDER_EMAIL",    "info@advisia.ch"),
+    "website":  os.getenv("SENDER_WEBSITE",  "advisia.ch"),
 }
