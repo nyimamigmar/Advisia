@@ -29,7 +29,7 @@ def check(label, fn):
 
 print()
 print("=" * 55)
-print("  Advisia Zefix-Checker – Troubleshoot")
+print("  Advisia Zefix-Checker Kanton AG – Troubleshoot")
 print("=" * 55)
 
 print(f"\n{INF} 1. Python-Module")
@@ -37,11 +37,11 @@ for mod in ("requests", "reportlab", "json"):
     check(f"import {mod}", lambda m=mod: __import__(m) and None)
 
 print(f"\n{INF} 2. Konfiguration (src/config.py)")
-from config import SENDER_INFO, BEZIRK_MURI_MUNICIPALITIES
-check("Absender Firma",    lambda: SENDER_INFO["company"])
-check("Absender Adresse",  lambda: f"{SENDER_INFO['address']}, {SENDER_INFO['zip_city']}")
-check("Absender E-Mail",   lambda: SENDER_INFO["email"])
-check("Gemeinden geladen", lambda: f"{len(BEZIRK_MURI_MUNICIPALITIES)} Gemeinden")
+from config import SENDER_INFO, CANTON_ID
+check("Absender Firma",   lambda: SENDER_INFO["company"])
+check("Absender Adresse", lambda: f"{SENDER_INFO['address']}, {SENDER_INFO['zip_city']}")
+check("Absender E-Mail",  lambda: SENDER_INFO["email"])
+check("Kanton",           lambda: f"Kanton {CANTON_ID}")
 
 print(f"\n{INF} 3. Zefix API – Verbindungstest")
 def test_zefix():

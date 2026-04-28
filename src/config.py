@@ -7,30 +7,7 @@ LETTERS_DIR = "letters"
 # On first run, only process firms registered within this many days
 FIRST_RUN_DAYS_LOOKBACK = 30
 
-# All municipalities (Gemeinden) in Bezirk Muri, Kanton Aargau
-BEZIRK_MURI_MUNICIPALITIES = {
-    "Abtwil",
-    "Auw",
-    "Besenbüren",
-    "Bettwil",
-    "Beinwil (Freiamt)",
-    "Boswil",
-    "Bünzen",
-    "Buttwil",
-    "Dintikon",
-    "Geltwil",
-    "Hilfikon",
-    "Islisberg",
-    "Kallern",
-    "Merenschwand",
-    "Muri (AG)",
-    "Mühlau",
-    "Rottenschwil",
-    "Sins",
-    "Sünikon",
-    "Villmergen",
-    "Waltenschwil",
-}
+CANTON_ID = "AG"
 
 SENDER_INFO = {
     "company":  os.getenv("SENDER_COMPANY",  "Advisia"),

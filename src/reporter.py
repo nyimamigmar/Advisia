@@ -54,7 +54,7 @@ def _html_report(new_firms: list[dict], check_time: datetime) -> str:
         <div class=\"badge-ok\">
           <h3>&#10003; {count} neue {firma_pl} eingetragen</h3>
           <p style=\"margin:0;font-size:13px;\">
-            Im Bezirk Muri wurden heute {count} neue {firma_pl}
+            Im Kanton Aargau wurden heute {count} neue {firma_pl}
             im Handelsregister eingetragen. Die entsprechenden Briefe wurden generiert.
           </p>
         </div>"""
@@ -81,7 +81,7 @@ def _html_report(new_firms: list[dict], check_time: datetime) -> str:
         <div class=\"badge-nil\">
           <h3>Keine Neueintragungen heute</h3>
           <p style=\"margin:0;font-size:13px;\">
-            Im Bezirk Muri wurden heute keine neuen Firmen im Handelsregister
+            Im Kanton Aargau wurden heute keine neuen Firmen im Handelsregister
             eingetragen. Morgen wird erneut geprüft.
           </p>
         </div>"""
@@ -95,7 +95,7 @@ def _html_report(new_firms: list[dict], check_time: datetime) -> str:
 <body>
 <div class=\"wrap\">
   <div class=\"hdr\">
-    <h2>Zefix Tagesbericht &ndash; Bezirk Muri</h2>
+    <h2>Zefix Tagesbericht &ndash; Kanton Aargau (AG)</h2>
     <p>Advisia &nbsp;|&nbsp; {today_str}</p>
   </div>
   <div class=\"body\">{main_block}</div>
@@ -128,8 +128,8 @@ def _subject(new_firms: list[dict]) -> str:
     today = date.today().strftime("%d.%m.%Y")
     if new_firms:
         n = len(new_firms)
-        return f"Zefix Bezirk Muri {today} – {n} neue {'Firmen' if n > 1 else 'Firma'} eingetragen"
-    return f"Zefix Bezirk Muri {today} – Keine Neueintragungen"
+        return f"Zefix Kanton Aargau {today} – {n} neue {'Firmen' if n > 1 else 'Firma'} eingetragen"
+    return f"Zefix Kanton Aargau {today} – Keine Neueintragungen"
 
 
 # ---------------------------------------------------------------------------

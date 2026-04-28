@@ -1,14 +1,13 @@
 """
-Zefix Checker – tägliche Prüfung auf neue Firmen im Bezirk Muri (AG)
+Zefix Checker – tägliche Prüfung auf neue Firmen im Kanton Aargau
 
 Ablauf:
   1. Alle aktiven Firmen im Kanton AG von Zefix laden.
-  2. Auf Gemeinden des Bezirks Muri filtern.
-  3. Neue Firmen (UID nicht in Statusdatei) erkennen.
-  4. Adresse via Zefix-Detail-API abrufen.
-  5. PDF-Gratulationsbrief generieren.
-  6. Tagesbericht per E-Mail senden.
-  7. Statusdatei aktualisieren (für den nächsten Lauf).
+  2. Neue Firmen (UID nicht in Statusdatei) erkennen.
+  3. Adresse via Zefix-Detail-API abrufen.
+  4. PDF-Gratulationsbrief generieren.
+  5. Tagesbericht per E-Mail senden.
+  6. Statusdatei aktualisieren (für den nächsten Lauf).
 """
 
 import json
@@ -18,7 +17,7 @@ import sys
 from datetime import date, datetime, timedelta
 
 from config import (
-    BEZIRK_MURI_MUNICIPALITIES,
+    CANTON_ID,
     FIRST_RUN_DAYS_LOOKBACK,
     LETTERS_DIR,
     SENDER_INFO,
@@ -58,10 +57,6 @@ def save_state(state: dict) -> None:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def in_bezirk_muri(firm: dict) -> bool:
-    return firm.get("legalSeat", "") in BEZIRK_MURI_MUNICIPALITIES
-
-
 def parse_registration_date(firm: dict) -> date:
     raw = firm.get("registrationDate")
     if raw:
@@ -81,21 +76,18 @@ def main() -> None:
     first_run = state.get("first_run", True)
     seen_uids: dict = state.get("seen_uids", {})
 
-    logger.info("Starte Zefix-Prüfung für Bezirk Muri …")
+    logger.info("Starte Zefix-Prüfung für Kanton Aargau …")
 
     # 1. Alle Firmen im Kanton AG laden
-    all_ag = search_firms_in_canton(canton_id="AG", active_only=True)
-    logger.info("AG gesamt: %d aktive Firmen gefunden.", len(all_ag))
+    all_ag = search_firms_in_canton(canton_id=CANTON_ID, active_only=True)
+    logger.info("Kanton AG: %d aktive Firmen gefunden.", len(all_ag))
 
-    # 2. Auf Bezirk Muri filtern
-    muri_firms = [f for f in all_ag if in_bezirk_muri(f)]
-    logger.info("Bezirk Muri: %d Firmen gefunden.", len(muri_firms))
-
-    # 3. Neue Firmen ermitteln
+    # 2. Neue Firmen ermitteln
+    ag_firms = all_ag
     cutoff = date.today() - timedelta(days=FIRST_RUN_DAYS_LOOKBACK)
     new_firms: list[dict] = []
 
-    for firm in muri_firms:
+    for firm in ag_firms:
         uid = firm.get("uid")
         if not uid:
             continue
@@ -113,7 +105,7 @@ def main() -> None:
 
     logger.info("Neue Firmen (Brief wird generiert): %d", len(new_firms))
 
-    # 4 & 5. Details abrufen und Briefe generieren
+    # 3 & 4. Details abrufen und Briefe generieren
     today_dir = os.path.join(LETTERS_DIR, str(date.today()))
     if new_firms:
         os.makedirs(today_dir, exist_ok=True)
@@ -140,17 +132,17 @@ def main() -> None:
             logger.error("    Fehler bei Briefgenerierung für %s: %s", name, exc)
             seen_uids[uid] = _seen_entry(firm, letter=False)
 
-    # Alle Muri-Firmen als gesehen markieren (auch ohne Brief)
-    for firm in muri_firms:
+    # Alle AG-Firmen als gesehen markieren (auch ohne Brief)
+    for firm in ag_firms:
         uid = firm.get("uid")
         if uid and uid not in seen_uids:
             seen_uids[uid] = _seen_entry(firm, letter=False)
 
-    # 6. Tagesbericht per E-Mail senden
+    # 5. Tagesbericht per E-Mail senden
     check_time = datetime.now()
     send_report(new_firms, check_time)
 
-    # 7. Status speichern
+    # 6. Status speichern
     state["first_run"]  = False
     state["last_check"] = check_time.isoformat()
     state["seen_uids"]  = seen_uids
