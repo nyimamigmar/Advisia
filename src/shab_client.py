@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 SHAB_URL = "https://www.shab.ch/api/eshab/entries"
 TIMEOUT  = 30
 PAGE_SIZE = 100
-DELAY     = 0.3   # Sekunden zwischen Seitenabfragen
+DELAY     = 0.3
 
 _session = requests.Session()
 _session.headers.update({
@@ -51,7 +51,6 @@ def get_new_registrations(canton: str = "AG",
             logger.error("SHAB API Fehler (Seite %d): %s", page, exc)
             break
 
-        # Spring-Page-Format: {"content": [...], "totalPages": N, ...}
         if isinstance(data, dict):
             entries     = data.get("content", [])
             total_pages = data.get("totalPages", 1)
@@ -79,18 +78,12 @@ def get_new_registrations(canton: str = "AG",
 
 
 def _parse_entry(entry: dict) -> Optional[dict]:
-    """Wandelt einen rohen SHAB-Eintrag in ein Firmen-Dict um.
-    Gibt None zurück wenn der Eintrag kein Neueintrag (NE) ist.
-    """
     sub_rubric = entry.get("subRubric", "")
-
-    # Nur Handelsregister-Einträge verarbeiten
     if not sub_rubric.upper().startswith("HR"):
         return None
 
     meta = entry.get("meta") or {}
 
-    # Mutationstyp prüfen – SHAB liefert 'NE' für Neueintrag
     mutation_type = (
         meta.get("mutationType")
         or meta.get("typeOfMutation")
@@ -98,11 +91,9 @@ def _parse_entry(entry: dict) -> Optional[dict]:
         or ""
     ).strip().upper()
 
-    # Wenn Mutationstyp bekannt ist und nicht NE → überspringen
     if mutation_type and mutation_type != "NE":
         return None
 
-    # Firmenname
     name = (
         meta.get("legalName")
         or meta.get("name")

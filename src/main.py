@@ -31,10 +31,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# State helpers
-# ---------------------------------------------------------------------------
-
 def load_state() -> dict:
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, encoding="utf-8") as f:
@@ -48,26 +44,19 @@ def save_state(state: dict) -> None:
         json.dump(state, f, indent=2, ensure_ascii=False)
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
 def main() -> None:
-    state      = load_state()
-    seen_ids   = set(state.get("seen_shab_ids", []))
-    today      = date.today()
+    state    = load_state()
+    seen_ids = set(state.get("seen_shab_ids", []))
+    today    = date.today()
 
     logger.info("Starte SHAB-Prüfung für Kanton %s (%s) …", CANTON_ID, today)
 
-    # 1. Heutige Neueintragungen aus SHAB
     all_new = get_new_registrations(canton=CANTON_ID, check_date=today)
     logger.info("SHAB: %d NE-Einträge heute gefunden.", len(all_new))
 
-    # 2. Bereits verarbeitete Einträge ausschliessen
     new_firms = [f for f in all_new if f.get("shabId") not in seen_ids]
     logger.info("Davon neu (noch nicht verarbeitet): %d", len(new_firms))
 
-    # 3 & 4. Adresse vervollständigen und Briefe generieren
     today_dir = os.path.join(LETTERS_DIR, str(today))
     if new_firms:
         os.makedirs(today_dir, exist_ok=True)
@@ -80,7 +69,6 @@ def main() -> None:
 
         logger.info("  Verarbeite: %s (%s) in %s", name, uid or f"SHAB-{shab_id}", seat)
 
-        # Adresse: SHAB hat sie oft direkt; sonst Zefix-Fallback
         address = firm.get("address")
         if not address and uid:
             details = get_firm_details(uid)
@@ -99,11 +87,9 @@ def main() -> None:
 
         seen_ids.add(shab_id)
 
-    # 5. Tagesbericht per E-Mail senden
     check_time = datetime.now()
     send_report(new_firms, check_time)
 
-    # 6. Status speichern
     state["last_check"]    = check_time.isoformat()
     state["seen_shab_ids"] = list(seen_ids)
     save_state(state)
