@@ -6,11 +6,10 @@ Aufruf:
   RESEND_API_KEY=re_xxx python troubleshoot.py
 """
 
-import json
 import os
 import sys
 import requests
-from datetime import datetime
+from datetime import datetime, date
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
@@ -29,11 +28,11 @@ def check(label, fn):
 
 print()
 print("=" * 55)
-print("  Advisia Zefix-Checker Kanton AG – Troubleshoot")
+print("  Advisia SHAB-Checker Kanton AG – Troubleshoot")
 print("=" * 55)
 
 print(f"\n{INF} 1. Python-Module")
-for mod in ("requests", "reportlab", "json"):
+for mod in ("requests", "reportlab"):
     check(f"import {mod}", lambda m=mod: __import__(m) and None)
 
 print(f"\n{INF} 2. Konfiguration (src/config.py)")
@@ -43,26 +42,43 @@ check("Absender Adresse", lambda: f"{SENDER_INFO['address']}, {SENDER_INFO['zip_
 check("Absender E-Mail",  lambda: SENDER_INFO["email"])
 check("Kanton",           lambda: f"Kanton {CANTON_ID}")
 
-print(f"\n{INF} 3. Zefix API – Verbindungstest")
-def test_zefix():
-    resp = requests.post(
-        "https://www.zefix.ch/ZefixREST/api/v1/firm/search",
-        json={"cantonIds": ["AG"], "activeOnly": True, "maxEntries": 1, "offset": 0, "name": ""},
-        headers={"Accept": "application/json", "Content-Type": "application/json"},
-        timeout=10,
+print(f"\n{INF} 3. SHAB API – Verbindungstest")
+def test_shab():
+    today = date.today().isoformat()
+    resp = requests.get(
+        "https://www.shab.ch/api/eshab/entries",
+        params={
+            "publicationStates": "PUBLISHED",
+            "cantons": CANTON_ID,
+            "since": today,
+            "until": today,
+            "pageRequest.page": 0,
+            "pageRequest.size": 1,
+        },
+        headers={"Accept": "application/json"},
+        timeout=15,
     )
     if resp.status_code == 200:
-        return f"HTTP 200, {resp.json().get('total','?')} Firmen in AG"
+        data = resp.json()
+        total = data.get("totalElements", "?") if isinstance(data, dict) else len(data)
+        return f"HTTP 200 – {total} Einträge heute in AG"
     return f"HTTP {resp.status_code}"
-check("Zefix API erreichbar", test_zefix)
+check("SHAB API erreichbar", test_shab)
 
-print(f"\n{INF} 4. PDF-Briefgenerierung")
+print(f"\n{INF} 4. SHAB NE-Suche (heute)")
+from shab_client import get_new_registrations
+def test_shab_ne():
+    firms = get_new_registrations(canton=CANTON_ID, check_date=date.today())
+    return f"{len(firms)} NE-Einträge heute gefunden"
+check("SHAB NE-Einträge abrufen", test_shab_ne)
+
+print(f"\n{INF} 5. PDF-Briefgenerierung")
 from letter_generator import generate_letter
 import tempfile, pathlib
 DEMO_FIRM = {"uid": "CHE-999.000.001", "name": "Beispiel Handels GmbH",
-             "legalSeat": "Muri (AG)", "registrationDate": datetime.now().strftime("%Y-%m-%d")}
-DEMO_ADDR = {"street": "Marktgasse", "houseNumber": "7",
-             "swissZipCode": "5630", "city": "Muri AG"}
+             "legalSeat": "Aarau", "registrationDate": datetime.now().strftime("%Y-%m-%d")}
+DEMO_ADDR = {"street": "Bahnhofstrasse", "houseNumber": "10",
+             "swissZipCode": "5000", "city": "Aarau"}
 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
     tmp_pdf = tf.name
 check("PDF generieren", lambda: (
@@ -70,7 +86,7 @@ check("PDF generieren", lambda: (
     f"{pathlib.Path(tmp_pdf).stat().st_size:,} Bytes"
 )[1])
 
-print(f"\n{INF} 5. E-Mail-Tagesbericht (wird IMMER gesendet)")
+print(f"\n{INF} 6. E-Mail-Tagesbericht (wird IMMER gesendet)")
 from reporter import _html_report, _subject
 now = datetime.now()
 check("Betreff mit Firma",  lambda: _subject([DEMO_FIRM]))
@@ -87,7 +103,7 @@ else:
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
-                "from":    "Advisia Zefix-Checker <onboarding@resend.dev>",
+                "from":    "Advisia SHAB-Checker <onboarding@resend.dev>",
                 "to":      ["migmar.nyima@gmail.com"],
                 "subject": f"[TEST] {_subject([DEMO_FIRM])}",
                 "html":    _html_report([DEMO_FIRM], now),

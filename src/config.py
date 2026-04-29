@@ -4,9 +4,6 @@ ZEFIX_API_BASE = "https://www.zefix.ch/ZefixREST/api/v1"
 STATE_FILE = "data/seen_companies.json"
 LETTERS_DIR = "letters"
 
-# On first run, only process firms registered within this many days
-FIRST_RUN_DAYS_LOOKBACK = 30
-
 CANTON_ID = "AG"
 
 SENDER_INFO = {
