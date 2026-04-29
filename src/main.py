@@ -1,31 +1,26 @@
 """
-Zefix Checker – tägliche Prüfung auf neue Firmen im Kanton Aargau
+SHAB Checker – tägliche Prüfung auf Neueintragungen (NE) im Kanton Aargau.
 
 Ablauf:
-  1. Alle aktiven Firmen im Kanton AG von Zefix laden.
-  2. Neue Firmen (UID nicht in Statusdatei) erkennen.
-  3. Adresse via Zefix-Detail-API abrufen.
+  1. Heutige NE-Einträge aus SHAB laden (Mutationstyp Neueintrag).
+  2. Bereits verarbeitete SHAB-IDs aus Statusdatei ausschliessen.
+  3. Adresse: aus SHAB-Metadaten, Fallback auf Zefix-Detail-API.
   4. PDF-Gratulationsbrief generieren.
   5. Tagesbericht per E-Mail senden.
-  6. Statusdatei aktualisieren (für den nächsten Lauf).
+  6. Statusdatei aktualisieren.
 """
 
 import json
 import logging
 import os
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
-from config import (
-    CANTON_ID,
-    FIRST_RUN_DAYS_LOOKBACK,
-    LETTERS_DIR,
-    SENDER_INFO,
-    STATE_FILE,
-)
+from config import CANTON_ID, LETTERS_DIR, SENDER_INFO, STATE_FILE
 from letter_generator import generate_letter, safe_filename
 from reporter import send_report
-from zefix_client import get_firm_details, search_firms_in_canton
+from shab_client import get_new_registrations
+from zefix_client import get_firm_details
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,7 +39,7 @@ def load_state() -> dict:
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, encoding="utf-8") as f:
             return json.load(f)
-    return {"first_run": True, "last_check": None, "seen_uids": {}}
+    return {"last_check": None, "seen_shab_ids": []}
 
 
 def save_state(state: dict) -> None:
@@ -54,98 +49,63 @@ def save_state(state: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def parse_registration_date(firm: dict) -> date:
-    raw = firm.get("registrationDate")
-    if raw:
-        try:
-            return date.fromisoformat(str(raw)[:10])
-        except ValueError:
-            pass
-    return date.today()
-
-
-# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    state     = load_state()
-    first_run = state.get("first_run", True)
-    seen_uids: dict = state.get("seen_uids", {})
+    state      = load_state()
+    seen_ids   = set(state.get("seen_shab_ids", []))
+    today      = date.today()
 
-    logger.info("Starte Zefix-Prüfung für Kanton Aargau …")
+    logger.info("Starte SHAB-Prüfung für Kanton %s (%s) …", CANTON_ID, today)
 
-    # 1. Alle Firmen im Kanton AG laden
-    all_ag = search_firms_in_canton(canton_id=CANTON_ID, active_only=True)
-    logger.info("Kanton AG: %d aktive Firmen gefunden.", len(all_ag))
+    # 1. Heutige Neueintragungen aus SHAB
+    all_new = get_new_registrations(canton=CANTON_ID, check_date=today)
+    logger.info("SHAB: %d NE-Einträge heute gefunden.", len(all_new))
 
-    # 2. Neue Firmen ermitteln
-    ag_firms = all_ag
-    cutoff = date.today() - timedelta(days=FIRST_RUN_DAYS_LOOKBACK)
-    new_firms: list[dict] = []
+    # 2. Bereits verarbeitete Einträge ausschliessen
+    new_firms = [f for f in all_new if f.get("shabId") not in seen_ids]
+    logger.info("Davon neu (noch nicht verarbeitet): %d", len(new_firms))
 
-    for firm in ag_firms:
-        uid = firm.get("uid")
-        if not uid:
-            continue
-
-        if uid in seen_uids:
-            continue
-
-        if first_run:
-            reg_date = parse_registration_date(firm)
-            if reg_date < cutoff:
-                seen_uids[uid] = _seen_entry(firm, letter=False)
-                continue
-
-        new_firms.append(firm)
-
-    logger.info("Neue Firmen (Brief wird generiert): %d", len(new_firms))
-
-    # 3 & 4. Details abrufen und Briefe generieren
-    today_dir = os.path.join(LETTERS_DIR, str(date.today()))
+    # 3 & 4. Adresse vervollständigen und Briefe generieren
+    today_dir = os.path.join(LETTERS_DIR, str(today))
     if new_firms:
         os.makedirs(today_dir, exist_ok=True)
 
     for firm in new_firms:
-        uid  = firm.get("uid", "")
-        name = firm.get("name", "Unbekannt")
-        seat = firm.get("legalSeat", "")
+        name    = firm.get("name", "Unbekannt")
+        uid     = firm.get("uid", "")
+        seat    = firm.get("legalSeat", "")
+        shab_id = firm.get("shabId", "")
 
-        logger.info("  Verarbeite: %s (%s) in %s", name, uid, seat)
+        logger.info("  Verarbeite: %s (%s) in %s", name, uid or f"SHAB-{shab_id}", seat)
 
-        details = get_firm_details(uid)
-        address = details.get("address") if details else None
+        # Adresse: SHAB hat sie oft direkt; sonst Zefix-Fallback
+        address = firm.get("address")
+        if not address and uid:
+            details = get_firm_details(uid)
+            if details:
+                address = details.get("address")
 
-        uid_safe  = uid.replace("-", "").replace(".", "")
+        uid_safe  = (uid or shab_id).replace("-", "").replace(".", "")
         name_safe = safe_filename(name)
         out_path  = os.path.join(today_dir, f"{uid_safe}_{name_safe}.pdf")
 
         try:
             generate_letter(firm, address, SENDER_INFO, out_path)
             logger.info("    Brief erstellt: %s", out_path)
-            seen_uids[uid] = _seen_entry(firm, letter=True, path=out_path)
         except Exception as exc:  # noqa: BLE001
             logger.error("    Fehler bei Briefgenerierung für %s: %s", name, exc)
-            seen_uids[uid] = _seen_entry(firm, letter=False)
 
-    # Alle AG-Firmen als gesehen markieren (auch ohne Brief)
-    for firm in ag_firms:
-        uid = firm.get("uid")
-        if uid and uid not in seen_uids:
-            seen_uids[uid] = _seen_entry(firm, letter=False)
+        seen_ids.add(shab_id)
 
     # 5. Tagesbericht per E-Mail senden
     check_time = datetime.now()
     send_report(new_firms, check_time)
 
     # 6. Status speichern
-    state["first_run"]  = False
-    state["last_check"] = check_time.isoformat()
-    state["seen_uids"]  = seen_uids
+    state["last_check"]    = check_time.isoformat()
+    state["seen_shab_ids"] = list(seen_ids)
     save_state(state)
     logger.info("Statusdatei gespeichert: %s", STATE_FILE)
 
@@ -154,19 +114,6 @@ def main() -> None:
                     len(new_firms), today_dir)
     else:
         logger.info("FERTIG – keine neuen Firmen heute.")
-
-
-def _seen_entry(firm: dict, *, letter: bool, path: str = "") -> dict:
-    entry: dict = {
-        "name":       firm.get("name", ""),
-        "legal_seat": firm.get("legalSeat", ""),
-        "reg_date":   firm.get("registrationDate", ""),
-        "first_seen": str(date.today()),
-        "letter":     letter,
-    }
-    if path:
-        entry["letter_path"] = path
-    return entry
 
 
 if __name__ == "__main__":
